@@ -405,10 +405,6 @@
                     full: element.getAttribute('full') || '',
                     desc: element.getAttribute('desc') || ''
                 }));
-
-                console.log(`Loaded ${cotData.length} COT definitions`);
-                // Debug: log first few entries
-                console.log('First 5 COT entries:', cotData.slice(0, 5));
             } catch (error) {
                 console.error('Error loading COT data:', error);
             }
@@ -420,9 +416,7 @@
             let regexPattern = pattern.replace(/[[\]{}()*+?^$|\\]/g, '\\$&');
             // Convert COT wildcards (.) to regex character class
             regexPattern = regexPattern.replace(/\./g, '[a-zA-Z0-9]');
-            console.log('COT pattern:', pattern, '-> Regex pattern:', regexPattern);
             const finalRegex = new RegExp('^' + regexPattern + '$', 'i');
-            console.log('Final regex:', finalRegex.toString());
             return finalRegex;
         }
 
@@ -472,13 +466,11 @@
                     try {
                         const regex = cotPatternToRegex(cot.cot);
                         if (regex.test(parentCode)) {
-                            console.log('Found parent:', parentCode, 'for input:', input);
                             return { ...cot, matchType: 'parent', actualCode: parentCode };
                         }
                     } catch (error) {
                         // If regex fails, try exact match
                         if (cot.cot.toLowerCase() === parentCode.toLowerCase()) {
-                            console.log('Found parent (exact):', parentCode, 'for input:', input);
                             return { ...cot, matchType: 'parent', actualCode: parentCode };
                         }
                     }
@@ -486,7 +478,6 @@
 
                 // Parent not found at this level, try going up one more level
                 currentCode = parentCode;
-                console.log('Parent not found for:', parentCode, 'trying next level up');
             }
         }
 
@@ -497,21 +488,18 @@
             const matches = [];
             const inputTrimmed = input.trim();
             currentQuery = inputTrimmed; // Store current query for dot substitution
-            console.log('Searching for:', inputTrimmed);
 
             for (const cot of cotData) {
                 try {
                     // First try exact regex match
                     const regex = cotPatternToRegex(cot.cot);
                     if (regex.test(inputTrimmed)) {
-                        console.log('Exact match found:', cot.cot, 'matches', inputTrimmed);
                         matches.push({ ...cot, matchType: 'exact', matchLength: cot.cot.length });
                         continue;
                     }
 
                     // Then try partial match (input is prefix of pattern)
                     if (isPartialMatch(inputTrimmed, cot.cot)) {
-                        console.log('Partial match found:', cot.cot, 'starts with', inputTrimmed);
                         matches.push({ ...cot, matchType: 'partial', matchLength: cot.cot.length });
                     }
                 } catch (error) {
@@ -536,7 +524,6 @@
             // Sort partial matches alphabetically by COT code
             partialMatches.sort((a, b) => a.cot.localeCompare(b.cot));
 
-            console.log('Total matches found:', matches.length, 'Parent:', parentDefinition ? 'found' : 'none');
             return { exact: exactMatches, partial: partialMatches, parent: parentDefinition };
         }
 
