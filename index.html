@@ -288,6 +288,55 @@
         let isLoading = false;
         let currentQuery = '';
 
+        // Affiliation mappings for COT codes starting with "a-"
+        const affiliations = {
+            'p': 'Pending',
+            'u': 'Unknown',
+            'a': 'Assumed Friend',
+            'f': 'Friend',
+            'n': 'Neutral',
+            's': 'Suspect',
+            'h': 'Hostile',
+            'j': 'Joker',
+            'k': 'Faker',
+            'o': 'None Specified',
+            'g': 'Exercise Pending',
+            'w': 'Exercise Unknown',
+            'm': 'Exercise Assumed Friend',
+            'd': 'Exercise Friend',
+            'l': 'Exercise Neutral',
+            'c': 'Exercise Assume Hostile'
+        };
+
+        // Build complete full path including domain and affiliation
+        function buildFullPath(cotCode, originalFull, actualCode = null) {
+            const codeToCheck = actualCode || cotCode;
+
+            // Check if this is an atom domain COT code (starts with "a-")
+            if (codeToCheck.toLowerCase().startsWith('a-') && codeToCheck.length >= 3) {
+                const affiliationChar = codeToCheck.charAt(2).toLowerCase();
+                const affiliationName = affiliations[affiliationChar];
+
+                if (affiliationName && originalFull) {
+                    return `Atom/${affiliationName}/${originalFull}`;
+                }
+            }
+
+            return originalFull || '';
+        }
+
+        // Display COT code with actual affiliation from user query
+        function displayCotCode(cotPattern, actualCode = null) {
+            const codeToUse = actualCode || currentQuery;
+
+            // If it's an atom domain pattern (a-.-...) and we have a user query, substitute the affiliation
+            if (cotPattern.toLowerCase().startsWith('a-.') && codeToUse && codeToUse.toLowerCase().startsWith('a-') && codeToUse.length >= 3) {
+                return cotPattern.replace('a-.', `a-${codeToUse.charAt(2)}`);
+            }
+
+            return cotPattern;
+        }
+
         // Show toast notification
         function showToast(message) {
             const toast = document.getElementById('toast');
@@ -503,13 +552,17 @@
                 // Show exact matches in main block, or subtle "no exact matches" if only partials
                 if (exactMatches.length > 0) {
                     resultsHeader.textContent = `Found ${exactMatches.length} matching COT definition${exactMatches.length === 1 ? '' : 's'} for "${query}"`;
-                    resultsList.innerHTML = exactMatches.map(match => `
-                        <div class="result-item">
-                            <div class="cot-code">${match.cot}</div>
-                            <div class="cot-desc">${match.desc}</div>
-                            ${match.full ? `<div class="cot-full">${match.full}</div>` : ''}
-                        </div>
-                    `).join('');
+                    resultsList.innerHTML = exactMatches.map(match => {
+                        const fullPath = buildFullPath(match.cot, match.full, currentQuery);
+                        const displayCode = displayCotCode(match.cot, currentQuery);
+                        return `
+                            <div class="result-item">
+                                <div class="cot-code">${displayCode}</div>
+                                <div class="cot-desc">${match.desc}</div>
+                                ${fullPath ? `<div class="cot-full">${fullPath}</div>` : ''}
+                            </div>
+                        `;
+                    }).join('');
                 } else {
                     resultsHeader.textContent = `No exact matches for "${query}"`;
                     resultsList.innerHTML = '<div class="no-exact-results">No exact matches found. See related options below.</div>';
@@ -519,11 +572,13 @@
                 // Show parent definition block
                 if (parentDefinition) {
                     parentHeader.textContent = 'Parent definition';
+                    const parentFullPath = buildFullPath(parentDefinition.cot, parentDefinition.full, parentDefinition.actualCode);
+                    const parentDisplayCode = displayCotCode(parentDefinition.cot, parentDefinition.actualCode);
                     parentList.innerHTML = `
                         <div class="result-item">
-                            <div class="cot-code">${parentDefinition.cot}</div>
+                            <div class="cot-code">${parentDisplayCode}</div>
                             <div class="cot-desc">${parentDefinition.desc}</div>
-                            ${parentDefinition.full ? `<div class="cot-full">${parentDefinition.full}</div>` : ''}
+                            ${parentFullPath ? `<div class="cot-full">${parentFullPath}</div>` : ''}
                             <div class="result-actions">
                                 <button class="action-btn" onclick="searchForCode('${parentDefinition.actualCode}')" title="Drill up to this code">⬆️ Drill up</button>
                                 <button class="action-btn" onclick="copyToClipboard('${parentDefinition.actualCode}')" title="Copy to clipboard">📋 Copy</button>
@@ -540,11 +595,13 @@
                     extensionsHeader.textContent = `More specific options (${partialMatches.length})`;
                     extensionsList.innerHTML = partialMatches.map(match => {
                         const substitutedCode = substituteDots(match.cot, currentQuery);
+                        const fullPath = buildFullPath(match.cot, match.full, substitutedCode);
+                        const displayCode = displayCotCode(match.cot, substitutedCode);
                         return `
                             <div class="result-item">
-                                <div class="cot-code">${match.cot}</div>
+                                <div class="cot-code">${displayCode}</div>
                                 <div class="cot-desc">${match.desc}</div>
-                                ${match.full ? `<div class="cot-full">${match.full}</div>` : ''}
+                                ${fullPath ? `<div class="cot-full">${fullPath}</div>` : ''}
                                 <div class="result-actions">
                                     <button class="action-btn" onclick="searchForCode('${substitutedCode}')" title="Drill down into this code">⬇️ Drill down</button>
                                     <button class="action-btn" onclick="copyToClipboard('${substitutedCode}')" title="Copy to clipboard">📋 Copy</button>
