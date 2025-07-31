@@ -627,11 +627,50 @@
             }
         }
 
+        // Auto-correct input to add missing dashes between characters
+        function autoCorrectInput(input) {
+            if (input.length <= 1) {
+                return input;
+            }
+
+            let result = '';
+            for (let i = 0; i < input.length; i++) {
+                const char = input[i];
+
+                // Add the current character
+                result += char;
+
+                // If this is not the last character and it's alphanumeric
+                if (i < input.length - 1 && /[a-zA-Z0-9]/.test(char)) {
+                    const nextChar = input[i + 1];
+                    // If next character is also alphanumeric, we need a dash between them
+                    if (/[a-zA-Z0-9]/.test(nextChar)) {
+                        result += '-';
+                    }
+                }
+            }
+
+            return result;
+        }
+
         // Handle input changes with debouncing
         let searchTimeout;
         function handleInput() {
             const input = document.getElementById('cotInput');
-            const query = input.value.trim();
+            let query = input.value.trim();
+
+            // Auto-correct the input immediately
+            const correctedQuery = autoCorrectInput(query);
+            if (correctedQuery !== query) {
+                // Update the input field with corrected value
+                input.value = correctedQuery;
+                query = correctedQuery;
+
+                // Move cursor to the end
+                setTimeout(() => {
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }, 0);
+            }
 
             clearTimeout(searchTimeout);
 
@@ -661,7 +700,17 @@
 
             const input = document.getElementById('cotInput');
             input.addEventListener('input', handleInput);
-            input.addEventListener('paste', () => setTimeout(handleInput, 0));
+            input.addEventListener('paste', () => {
+                setTimeout(() => {
+                    // Immediately auto-correct pasted content
+                    const correctedQuery = autoCorrectInput(input.value.trim());
+                    if (correctedQuery !== input.value.trim()) {
+                        input.value = correctedQuery;
+                        input.setSelectionRange(input.value.length, input.value.length);
+                    }
+                    handleInput();
+                }, 0);
+            });
 
             // Focus on input
             input.focus();
