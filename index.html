@@ -99,6 +99,10 @@
             display: none;
         }
 
+        #extensions {
+            margin-top: 20px;
+        }
+
         .results-header {
             padding: 20px;
             border-bottom: 1px solid #eee;
@@ -149,6 +153,15 @@
             padding: 40px;
             color: #666;
         }
+
+        .no-exact-results {
+            text-align: center;
+            padding: 30px;
+            color: #888;
+            font-style: italic;
+            font-size: 0.95rem;
+        }
+
 
         @media (max-width: 768px) {
             .container {
@@ -201,6 +214,14 @@
                 <div class="loading">Searching...</div>
             </div>
         </div>
+
+        <div class="results" id="extensions" style="display: none;">
+            <div class="results-header" id="extensionsHeader">
+                More specific options
+            </div>
+            <div class="results-list" id="extensionsList">
+            </div>
+        </div>
     </div>
 
     <script>
@@ -242,6 +263,21 @@
             return finalRegex;
         }
 
+        // Check if input is a partial match (prefix) of a COT pattern
+        function isPartialMatch(input, pattern) {
+            if (input.length >= pattern.length) return false;
+            
+            for (let i = 0; i < input.length; i++) {
+                if (pattern[i] === '.') {
+                    // Wildcard matches any character
+                    continue;
+                } else if (pattern[i].toLowerCase() !== input[i].toLowerCase()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         // Search for matching COT codes
         function searchCOT(input) {
             if (!input.trim()) return [];
@@ -250,31 +286,37 @@
             const inputTrimmed = input.trim();
             console.log('Searching for:', inputTrimmed);
 
-            // Special debug for our test case
-            if (inputTrimmed.toLowerCase() === 'a-f-a-m-f-c-h') {
-                console.log('Testing specific case: a-f-A-M-F-C-H');
-                const testPattern = 'a-.-A-M-F-C-H';
-                const testRegex = cotPatternToRegex(testPattern);
-                console.log('Testing pattern:', testPattern, 'against input:', inputTrimmed);
-                console.log('Match result:', testRegex.test(inputTrimmed));
-            }
-
             for (const cot of cotData) {
                 try {
-                    // Convert COT pattern to proper regex
+                    // First try exact regex match
                     const regex = cotPatternToRegex(cot.cot);
                     if (regex.test(inputTrimmed)) {
-                        console.log('Match found:', cot.cot, 'matches', inputTrimmed);
-                        matches.push({ ...cot, matchType: 'regex' });
+                        console.log('Exact match found:', cot.cot, 'matches', inputTrimmed);
+                        matches.push({ ...cot, matchType: 'exact', matchLength: cot.cot.length });
+                        continue;
+                    }
+
+                    // Then try partial match (input is prefix of pattern)
+                    if (isPartialMatch(inputTrimmed, cot.cot)) {
+                        console.log('Partial match found:', cot.cot, 'starts with', inputTrimmed);
+                        matches.push({ ...cot, matchType: 'partial', matchLength: cot.cot.length });
                     }
                 } catch (error) {
                     console.error('Regex error for pattern:', cot.cot, error);
                     // If regex fails, fall back to exact match
                     if (cot.cot.toLowerCase() === inputTrimmed.toLowerCase()) {
-                        matches.push({ ...cot, matchType: 'exact' });
+                        matches.push({ ...cot, matchType: 'exact', matchLength: cot.cot.length });
                     }
                 }
             }
+
+            // Sort by match type (exact first) then by length (shortest first)
+            matches.sort((a, b) => {
+                if (a.matchType !== b.matchType) {
+                    return a.matchType === 'exact' ? -1 : 1;
+                }
+                return a.matchLength - b.matchLength;
+            });
 
             console.log('Total matches found:', matches.length);
             return matches;
@@ -285,23 +327,52 @@
             const resultsDiv = document.getElementById('results');
             const resultsHeader = document.getElementById('resultsHeader');
             const resultsList = document.getElementById('resultsList');
+            const extensionsDiv = document.getElementById('extensions');
+            const extensionsHeader = document.getElementById('extensionsHeader');
+            const extensionsList = document.getElementById('extensionsList');
 
-            if (matches.length === 0) {
+            // Separate exact matches from partial matches
+            const exactMatches = matches.filter(match => match.matchType === 'exact');
+            const partialMatches = matches.filter(match => match.matchType === 'partial');
+
+            // Handle main results block
+            if (exactMatches.length === 0 && partialMatches.length === 0) {
                 resultsHeader.textContent = `No matches found for "${query}"`;
                 resultsList.innerHTML = '<div class="no-results">No COT definitions match your input. Try a different code or check your spelling.</div>';
+                resultsDiv.style.display = 'block';
+                extensionsDiv.style.display = 'none';
             } else {
-                resultsHeader.textContent = `Found ${matches.length} matching COT definition${matches.length === 1 ? '' : 's'} for "${query}"`;
+                // Show exact matches in main block, or subtle "no exact matches" if only partials
+                if (exactMatches.length > 0) {
+                    resultsHeader.textContent = `Found ${exactMatches.length} matching COT definition${exactMatches.length === 1 ? '' : 's'} for "${query}"`;
+                    resultsList.innerHTML = exactMatches.map(match => `
+                        <div class="result-item">
+                            <div class="cot-code">${match.cot}</div>
+                            <div class="cot-desc">${match.desc}</div>
+                            ${match.full ? `<div class="cot-full">${match.full}</div>` : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    resultsHeader.textContent = `No exact matches for "${query}"`;
+                    resultsList.innerHTML = '<div class="no-exact-results">No exact matches found. See more specific options below.</div>';
+                }
+                resultsDiv.style.display = 'block';
 
-                resultsList.innerHTML = matches.map(match => `
-                    <div class="result-item">
-                        <div class="cot-code">${match.cot}</div>
-                        <div class="cot-desc">${match.desc}</div>
-                        ${match.full ? `<div class="cot-full">${match.full}</div>` : ''}
-                    </div>
-                `).join('');
+                // Show partial matches in extensions block
+                if (partialMatches.length > 0) {
+                    extensionsHeader.textContent = `More specific options (${partialMatches.length})`;
+                    extensionsList.innerHTML = partialMatches.map(match => `
+                        <div class="result-item">
+                            <div class="cot-code">${match.cot}</div>
+                            <div class="cot-desc">${match.desc}</div>
+                            ${match.full ? `<div class="cot-full">${match.full}</div>` : ''}
+                        </div>
+                    `).join('');
+                    extensionsDiv.style.display = 'block';
+                } else {
+                    extensionsDiv.style.display = 'none';
+                }
             }
-
-            resultsDiv.style.display = 'block';
         }
 
         // Handle input changes with debouncing
@@ -314,6 +385,7 @@
 
             if (!query) {
                 document.getElementById('results').style.display = 'none';
+                document.getElementById('extensions').style.display = 'none';
                 return;
             }
 
