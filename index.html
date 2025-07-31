@@ -99,6 +99,10 @@
             display: none;
         }
 
+        #parent {
+            margin-top: 20px;
+        }
+
         #extensions {
             margin-top: 20px;
         }
@@ -260,6 +264,14 @@
             </div>
         </div>
 
+        <div class="results" id="parent" style="display: none;">
+            <div class="results-header" id="parentHeader">
+                Parent definition
+            </div>
+            <div class="results-list" id="parentList">
+            </div>
+        </div>
+
         <div class="results" id="extensions" style="display: none;">
             <div class="results-header" id="extensionsHeader">
                 More specific options
@@ -375,9 +387,50 @@
             return true;
         }
 
+        // Get parent COT code by removing the last segment (letter and dash)
+        function getParentCOTCode(input) {
+            const lastDashIndex = input.lastIndexOf('-');
+            if (lastDashIndex > 0) {
+                return input.substring(0, lastDashIndex);
+            }
+            return null;
+        }
+
+        // Find parent definition for a given COT code (recursively searches up hierarchy)
+        function findParentDefinition(input) {
+            let currentCode = input;
+            
+            // Keep going up the hierarchy until we find a parent or run out of levels
+            while (true) {
+                const parentCode = getParentCOTCode(currentCode);
+                if (!parentCode) return null; // No more parent levels
+                
+                // Search for this parent code in the data
+                for (const cot of cotData) {
+                    try {
+                        const regex = cotPatternToRegex(cot.cot);
+                        if (regex.test(parentCode)) {
+                            console.log('Found parent:', parentCode, 'for input:', input);
+                            return { ...cot, matchType: 'parent', actualCode: parentCode };
+                        }
+                    } catch (error) {
+                        // If regex fails, try exact match
+                        if (cot.cot.toLowerCase() === parentCode.toLowerCase()) {
+                            console.log('Found parent (exact):', parentCode, 'for input:', input);
+                            return { ...cot, matchType: 'parent', actualCode: parentCode };
+                        }
+                    }
+                }
+                
+                // Parent not found at this level, try going up one more level
+                currentCode = parentCode;
+                console.log('Parent not found for:', parentCode, 'trying next level up');
+            }
+        }
+
         // Search for matching COT codes
         function searchCOT(input) {
-            if (!input.trim()) return [];
+            if (!input.trim()) return { exact: [], partial: [], parent: null };
 
             const matches = [];
             const inputTrimmed = input.trim();
@@ -408,7 +461,10 @@
                 }
             }
 
-            // Sort by match type (exact first) then by length (shortest first)
+            // Find parent definition
+            const parentDefinition = findParentDefinition(inputTrimmed);
+
+            // Sort matches by match type (exact first) then by length (shortest first)
             matches.sort((a, b) => {
                 if (a.matchType !== b.matchType) {
                     return a.matchType === 'exact' ? -1 : 1;
@@ -416,28 +472,34 @@
                 return a.matchLength - b.matchLength;
             });
 
-            console.log('Total matches found:', matches.length);
-            return matches;
+            // Separate exact and partial matches
+            const exactMatches = matches.filter(match => match.matchType === 'exact');
+            const partialMatches = matches.filter(match => match.matchType === 'partial');
+
+            console.log('Total matches found:', matches.length, 'Parent:', parentDefinition ? 'found' : 'none');
+            return { exact: exactMatches, partial: partialMatches, parent: parentDefinition };
         }
 
         // Display results
-        function displayResults(matches, query) {
+        function displayResults(matchData, query) {
             const resultsDiv = document.getElementById('results');
             const resultsHeader = document.getElementById('resultsHeader');
             const resultsList = document.getElementById('resultsList');
+            const parentDiv = document.getElementById('parent');
+            const parentHeader = document.getElementById('parentHeader');
+            const parentList = document.getElementById('parentList');
             const extensionsDiv = document.getElementById('extensions');
             const extensionsHeader = document.getElementById('extensionsHeader');
             const extensionsList = document.getElementById('extensionsList');
 
-            // Separate exact matches from partial matches
-            const exactMatches = matches.filter(match => match.matchType === 'exact');
-            const partialMatches = matches.filter(match => match.matchType === 'partial');
+            const { exact: exactMatches, partial: partialMatches, parent: parentDefinition } = matchData;
 
             // Handle main results block
-            if (exactMatches.length === 0 && partialMatches.length === 0) {
+            if (exactMatches.length === 0 && partialMatches.length === 0 && !parentDefinition) {
                 resultsHeader.textContent = `No matches found for "${query}"`;
                 resultsList.innerHTML = '<div class="no-results">No COT definitions match your input. Try a different code or check your spelling.</div>';
                 resultsDiv.style.display = 'block';
+                parentDiv.style.display = 'none';
                 extensionsDiv.style.display = 'none';
             } else {
                 // Show exact matches in main block, or subtle "no exact matches" if only partials
@@ -452,9 +514,28 @@
                     `).join('');
                 } else {
                     resultsHeader.textContent = `No exact matches for "${query}"`;
-                    resultsList.innerHTML = '<div class="no-exact-results">No exact matches found. See more specific options below.</div>';
+                    resultsList.innerHTML = '<div class="no-exact-results">No exact matches found. See related options below.</div>';
                 }
                 resultsDiv.style.display = 'block';
+
+                // Show parent definition block
+                if (parentDefinition) {
+                    parentHeader.textContent = 'Parent definition';
+                    parentList.innerHTML = `
+                        <div class="result-item">
+                            <div class="cot-code">${parentDefinition.cot}</div>
+                            <div class="cot-desc">${parentDefinition.desc}</div>
+                            ${parentDefinition.full ? `<div class="cot-full">${parentDefinition.full}</div>` : ''}
+                            <div class="result-actions">
+                                <button class="action-btn" onclick="searchForCode('${parentDefinition.actualCode}')" title="Drill up to this code">⬆️ Drill up</button>
+                                <button class="action-btn" onclick="copyToClipboard('${parentDefinition.actualCode}')" title="Copy to clipboard">📋 Copy</button>
+                            </div>
+                        </div>
+                    `;
+                    parentDiv.style.display = 'block';
+                } else {
+                    parentDiv.style.display = 'none';
+                }
 
                 // Show partial matches in extensions block
                 if (partialMatches.length > 0) {
@@ -490,6 +571,7 @@
 
             if (!query) {
                 document.getElementById('results').style.display = 'none';
+                document.getElementById('parent').style.display = 'none';
                 document.getElementById('extensions').style.display = 'none';
                 return;
             }
