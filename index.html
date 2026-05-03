@@ -450,7 +450,12 @@
         }
 
         function normalizeSearchText(value) {
-            return value
+            const trimmed = value.trim();
+            const dehyphenatedSingleWord = /^([a-z0-9]-)+[a-z0-9]$/i.test(trimmed)
+                ? trimmed.replace(/-/g, '')
+                : trimmed;
+
+            return dehyphenatedSingleWord
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, ' ')
                 .trim();
@@ -458,7 +463,12 @@
 
         function isLikelyCOTCode(input) {
             const query = input.trim();
-            return /^[a-z0-9.-]+$/i.test(query) && (query.includes('-') || query.includes('.') || query.length <= 3);
+            return /^[a-z0-9.-]+$/i.test(query) && (query.includes('-') || query.includes('.'));
+        }
+
+        function shouldAutoCorrectInput(input) {
+            const query = input.trim();
+            return isLikelyCOTCode(query) && !/^([a-z0-9]-)+[a-z0-9]$/i.test(query);
         }
 
         function getTextMatchReason(cot, normalizedQuery) {
@@ -706,7 +716,7 @@
             let query = input.value.trim();
 
             // Auto-correct code-like input immediately, but leave keyword searches alone.
-            const correctedQuery = isLikelyCOTCode(query) ? autoCorrectInput(query) : query;
+            const correctedQuery = shouldAutoCorrectInput(query) ? autoCorrectInput(query) : query;
             if (correctedQuery !== query) {
                 // Update the input field with corrected value
                 input.value = correctedQuery;
@@ -749,7 +759,8 @@
             input.addEventListener('paste', () => {
                 setTimeout(() => {
                     // Immediately auto-correct pasted content
-                    const correctedQuery = autoCorrectInput(input.value.trim());
+                    const pastedQuery = input.value.trim();
+                    const correctedQuery = shouldAutoCorrectInput(pastedQuery) ? autoCorrectInput(pastedQuery) : pastedQuery;
                     if (correctedQuery !== input.value.trim()) {
                         input.value = correctedQuery;
                         input.setSelectionRange(input.value.length, input.value.length);
