@@ -529,6 +529,30 @@
                 .trim();
         }
 
+        function restoreKeywordDisplay(value) {
+            if (hasExactCOTMatch(value)) {
+                return value.trim();
+            }
+
+            return value.trim().replace(/\b(?:[a-z0-9]-){2,}[a-z0-9]\b/gi, match => {
+                const restored = match.replace(/-/g, '').toLowerCase();
+                return restored.charAt(0).toUpperCase() + restored.slice(1);
+            });
+        }
+
+        function hasExactCOTMatch(input) {
+            const query = input.trim();
+            if (!query) return false;
+
+            return cotData.some(cot => {
+                try {
+                    return cotPatternToRegex(cot.cot).test(query);
+                } catch (error) {
+                    return cot.cot.toLowerCase() === query.toLowerCase();
+                }
+            });
+        }
+
         function isLikelyCOTCode(input) {
             const query = input.trim();
             return /^[a-z0-9.-]+$/i.test(query) && (query.includes('-') || query.includes('.'));
@@ -578,6 +602,7 @@
                 help.textContent = 'Matches COT descriptions, display labels, and full hierarchy paths.';
                 input.placeholder = 'Armor, Engineer, Artillery';
                 input.classList.add('keyword-mode');
+                input.value = restoreKeywordDisplay(input.value);
             }
 
             handleInput();
